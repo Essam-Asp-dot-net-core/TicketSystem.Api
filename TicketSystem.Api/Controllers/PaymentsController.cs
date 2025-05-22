@@ -91,5 +91,18 @@ namespace TicketSystem.Api.Controllers
 			return Ok(result);
 		}
 
+		[HttpDelete("{id}")]
+		public async Task<IActionResult> DeletePayment(int id)
+		{
+			var payment = await _dbContext.Payments.FindAsync(id);
+			if (payment == null)
+				return NotFound();
+
+			_dbContext.Payments.Remove(payment);
+			await _dbContext.SaveChangesAsync();
+
+			return NoContent();
+		}
+
 	}
 }

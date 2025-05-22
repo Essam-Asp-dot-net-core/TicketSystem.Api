@@ -116,6 +116,19 @@ namespace TicketSystem.Api.Controllers
 			await _dbContext.SaveChangesAsync();
 			return Ok("Consultation answered successfully");
 		}
-		
+
+		[HttpDelete("{id}")]
+		public async Task<IActionResult> DeleteConsultation(int id)
+		{
+			var consultation = await _dbContext.Consultations.FindAsync(id);
+			if(consultation == null) return NotFound();
+
+			_dbContext.Remove(consultation);
+			await _dbContext.SaveChangesAsync();
+
+			return NoContent();
+		}
+
+
 	}
 }

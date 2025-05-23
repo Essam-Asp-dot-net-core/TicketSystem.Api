@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Ticket.Repository.Data.AppDbContext;
+using Ticket.Services;
 
 namespace TicketSystem.Api
 {
@@ -40,7 +41,7 @@ namespace TicketSystem.Api
 		});
 
 			builder.Services.AddAuthorization();
-
+			builder.Services.AddHttpClient<PaymobServices>();
 
 			//Services
 			builder.Services.AddAutoMapper(typeof(Program));

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Ticket.Core.Entity;
 using Ticket.Repository.Data.AppDbContext;
+using Ticket.Services;
 using TicketSystem.Api.DTOs;
 
 namespace TicketSystem.Api.Controllers
@@ -14,11 +15,13 @@ namespace TicketSystem.Api.Controllers
 	{
 		private readonly ApplicationDbContext _dbContext;
 		private readonly IMapper _mapper;
+		private readonly PaymobServices _paymobServices;
 
-		public PaymentsController(ApplicationDbContext dbContext , IMapper mapper)
+		public PaymentsController(ApplicationDbContext dbContext , IMapper mapper , PaymobServices paymobServices)
 		{
 			_dbContext = dbContext;
 			_mapper = mapper;
+			_paymobServices = paymobServices;
 		}
 
 		[HttpPost]
@@ -103,6 +106,61 @@ namespace TicketSystem.Api.Controllers
 
 			return NoContent();
 		}
+
+		[HttpPost("pay-via-card")]
+		public async Task<IActionResult> PayViaCard([FromQuery] decimal amount, [FromQuery] string email, [FromQuery] string phone)
+		{
+			if (amount <= 0)
+				return BadRequest("Amount must be greater than 0");
+
+			var token = await _paymobServices.GetAuthTokenAsync();
+			var orderId = await _paymobServices.CreateOrderAsync(token, amount);
+			var paymentKey = await _paymobServices.GetPaymentKeyAsync(token, orderId, amount, email, phone);
+			var paymentUrl = _paymobServices.GetCardPaymentUrl(paymentKey);
+
+			return Ok(new { paymentUrl });
+		}
+
+
+		[HttpPost("webhook")]
+		public async Task<IActionResult> PaymobWebhook([FromBody] PaymobWebhookDTO webhook)
+		{
+			if (webhook.obj.success == true && webhook.obj.is_refunded == false)
+			{
+				var consultationId = webhook.obj.order.id; // أو استخدم custom fields لربطها
+				var consultation = await _dbContext.Consultations.FindAsync(consultationId);
+
+				if (consultation == null)
+					return NotFound("Consultation not found");
+
+				// منع التكرار
+				var existingPayment = await _dbContext.Payments
+					.FirstOrDefaultAsync(p => p.ConsultationId == consultationId);
+
+				if (existingPayment != null)
+					return Ok("Payment already exists");
+
+				var payment = new Payment
+				{
+					Amount = webhook.obj.amount_cents / 100m,
+					PaidAt = DateTime.UtcNow,
+					PaymentMethod = "Card",
+					PaymentStatus = "Paid",
+					ConsultationId = consultationId,
+					UserId = consultation.ClientId
+				};
+
+				consultation.IsPaid = true;
+
+				await _dbContext.Payments.AddAsync(payment);
+				await _dbContext.SaveChangesAsync();
+
+				return Ok("Payment recorded successfully");
+			}
+
+			return BadRequest("Invalid transaction");
+		}
+
 
 	}
 }
